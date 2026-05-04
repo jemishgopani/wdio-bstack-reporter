@@ -974,9 +974,20 @@ which is **manually triggered only**. There is no auto-publish on push.
      attestation.
    - Creates a git tag `v<version>` and a GitHub release.
 
-Required repository secret: **`NPM_TOKEN`** (an "Automation" token from
-npmjs.com → Access Tokens). The workflow uses `id-token: write` so npm
-provenance can be issued — no extra config needed beyond the token.
+**Authentication: Trusted Publishing (OIDC)**, not a long-lived token. The
+workflow declares `id-token: write` and the npm CLI exchanges a short-lived
+GitHub Actions OIDC token for publish authorization at run time. Configure
+the trusted publisher once on npmjs.com → Packages → Trusted Publishers:
+
+- Publisher type: **GitHub Actions**
+- Organization or user: `jemishgopani`
+- Repository: `wdio-bstack-reporter`
+- Workflow filename: `publish.yml`
+
+No secrets to rotate, no 2FA-bypass tokens to leak, no `NPM_TOKEN` repo
+secret needed. The provenance signature is also part of the same OIDC
+flow, so npmjs.com shows a verified GitHub Actions provenance badge on
+the package page.
 
 ---
 
