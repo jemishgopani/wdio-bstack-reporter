@@ -1,0 +1,74 @@
+{
+  "name": "wdio-bstack-reporter",
+  "version": "0.1.0",
+  "description": "WebdriverIO reporter and launcher service that creates a BrowserStack Test Observability build per execution batch and updates it live as tests run. Optional Test Management integration with live result streaming, scope discovery, and hook-failure handling.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "bin": {
+    "wdio-bstack-reporter": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "keywords": [
+    "wdio",
+    "wdio-reporter",
+    "wdio-service",
+    "webdriverio",
+    "browserstack",
+    "test-observability",
+    "browserstack-test-management",
+    "test-management",
+    "reporter"
+  ],
+  "author": "Jemish Gopani <jemishgopani2@gmail.com>",
+  "homepage": "https://github.com/jemishgopani/wdio-bstack-reporter#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jemishgopani/wdio-bstack-reporter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jemishgopani/wdio-bstack-reporter/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "@wdio/reporter": "^9.0.0",
+    "@wdio/types": "^9.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@wdio/types": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@wdio/reporter": "^9.5.0",
+    "@wdio/types": "^9.5.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
