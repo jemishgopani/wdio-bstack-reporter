@@ -1,6 +1,6 @@
-import { glob } from 'node:fs/promises';
 import { resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { glob } from 'glob';
 import { discoverSpecTests } from './spec-parser.js';
 
 function normalizePath(p: string): string {
@@ -28,9 +28,8 @@ export async function expandSpecs(
   for (const pattern of patterns) {
     if (pattern.includes('*') || pattern.includes('?') || pattern.includes('[')) {
       try {
-        for await (const file of glob(pattern, { cwd })) {
-          found.add(resolvePath(cwd, file));
-        }
+        const matches = await glob(pattern, { cwd, absolute: true, posix: true });
+        for (const file of matches) found.add(resolvePath(file));
       } catch {
         /* malformed pattern → skip */
       }
