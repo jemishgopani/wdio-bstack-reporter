@@ -57,5 +57,9 @@ export function clearBuildContext(): void {
   delete process.env[ENV.JWT];
   delete process.env[ENV.API_MODE];
   delete process.env[ENV.ALLOW_SCREENSHOTS];
-  delete process.env[ENV.DASHBOARD_URL];
+  // DASHBOARD_URL is intentionally left set: it's a non-sensitive, stable
+  // public surface that user-defined services in wdio.conf.ts can read in
+  // their own onComplete hook (e.g. to post a chat notification with the
+  // run link). The process exits shortly after onComplete anyway, so there
+  // is no leak risk.
 }

@@ -36,6 +36,92 @@ describe('TestManagementClient', () => {
     expect(body.test_run.include_all).toBe(true);
   });
 
+  it('createRun uses the canonical urls.self from the API response and appends /folder', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          test_run: {
+            identifier: 'TR-258',
+            urls: {
+              self: 'https://test-management.browserstack.com/projects/232091/test-runs/TR-258',
+            },
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    const c = new TestManagementClient({
+      username: 'u',
+      accessKey: 'k',
+      projectId: 'PR-1',
+      maxRetries: 0,
+    });
+    const r = await c.createRun({ name: 'sample' });
+    expect(r.runId).toBe('TR-258');
+    expect(r.dashboardUrl).toBe(
+      'https://test-management.browserstack.com/projects/232091/test-runs/TR-258/folder',
+    );
+  });
+
+  it('createRun does not double the /folder suffix when the API already includes it', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          test_run: {
+            identifier: 'TR-9',
+            urls: {
+              self: 'https://test-management.browserstack.com/projects/123/test-runs/TR-9/folder',
+            },
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    const c = new TestManagementClient({
+      username: 'u',
+      accessKey: 'k',
+      projectId: 'PR-1',
+      maxRetries: 0,
+    });
+    const r = await c.createRun({ name: 'x' });
+    expect(r.dashboardUrl).toBe(
+      'https://test-management.browserstack.com/projects/123/test-runs/TR-9/folder',
+    );
+  });
+
+  it('createRun falls back to a synthesized URL when urls.self is missing (numericProjectId set)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ test_run: { identifier: 'TR-42' } }), { status: 200 }),
+    );
+    const c = new TestManagementClient({
+      username: 'u',
+      accessKey: 'k',
+      projectId: 'PR-7',
+      numericProjectId: '232091',
+      maxRetries: 0,
+    });
+    const r = await c.createRun({ name: 'sample' });
+    expect(r.dashboardUrl).toBe(
+      'https://test-management.browserstack.com/projects/232091/test-runs/TR-42/folder',
+    );
+  });
+
+  it('createRun falls back to identifier-based dashboard URL when nothing else is available', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ test_run: { identifier: 'TR-42' } }), { status: 200 }),
+    );
+    const c = new TestManagementClient({
+      username: 'u',
+      accessKey: 'k',
+      projectId: 'PR-7',
+      maxRetries: 0,
+    });
+    const r = await c.createRun({ name: 'sample' });
+    expect(r.dashboardUrl).toBe(
+      'https://test-management.browserstack.com/projects/PR-7/test-runs/TR-42',
+    );
+  });
+
   it('postResults chunks at 300 per request', async () => {
     fetchMock.mockImplementation(() => Promise.resolve(new Response('{}', { status: 200 })));
     const c = new TestManagementClient({

@@ -1,4 +1,4 @@
-import { describeCap, sanitizeCapabilities, type SanitizedCap } from './capabilities.js';
+import { describeCap, sanitizeCapabilities } from './capabilities.js';
 import { detectCI } from './ci.js';
 import { createClient } from './client/index.js';
 import type { BuildCreateInput, LogCreatedEvent } from './client/types.js';
@@ -59,6 +59,12 @@ export default class BstackService {
   #buildId: string | undefined;
   #dashboardUrl: string | undefined;
   #tmRunId: string | undefined;
+  /**
+   * Numeric project id for the configured TM project, resolved from
+   * `listTmProjects` during onPrepare. Used to build dashboard URLs that
+   * match the TM web UI's URL format (`/projects/<numeric>/test-runs/<numeric>/folder`).
+   */
+  #tmNumericProjectId: string | undefined;
   #tmDashboardUrl: string | undefined;
   #startedAt = '';
   #signalHandlersInstalled = false;
@@ -186,6 +192,10 @@ export default class BstackService {
               `Existing project ids: ${known}.`,
           );
         }
+        // Capture the numeric project id for dashboard URL building. The
+        // BS web UI's URL pattern is /projects/<numeric>/test-runs/<numeric>/folder,
+        // not the identifier-based path.
+        if (byId?.numericId) this.#tmNumericProjectId = byId.numericId;
         if (byId && byId.name !== projectName) {
           fail(
             `[wdio-bstack-reporter] Mismatch: testManagement.projectId ${JSON.stringify(tmProjectId)} has name ${JSON.stringify(byId.name)}, but projectName is ${JSON.stringify(projectName)}. ` +
@@ -352,6 +362,7 @@ export default class BstackService {
       username: auth.username,
       accessKey: auth.accessKey,
       projectId: tm.projectId,
+      ...(this.#tmNumericProjectId ? { numericProjectId: this.#tmNumericProjectId } : {}),
     });
     try {
       const useScope = tm.scopeFromSpecs === true && scope && scope.size > 0;
@@ -583,7 +594,7 @@ export default class BstackService {
         if (!forced) {
           delete process.env[ENV.TM_PROJECT_ID];
           delete process.env[ENV.TM_RUN_ID];
-          delete process.env[ENV.TM_DASHBOARD_URL];
+          // TM_DASHBOARD_URL stays set (see clearBuildContext rationale).
         }
       } else {
         try {
@@ -616,9 +627,12 @@ export default class BstackService {
           console.error('[wdio-bstack-reporter] Failed to close TM run:', err);
         } finally {
           if (!forced) {
+            // Clear sensitive/behavioral env vars so a wrapper that runs
+            // multiple WDIO invocations gets a clean slate. TM_DASHBOARD_URL
+            // is intentionally left set — it's non-sensitive and useful to
+            // user-defined services that read it in their own onComplete.
             delete process.env[ENV.TM_PROJECT_ID];
             delete process.env[ENV.TM_RUN_ID];
-            delete process.env[ENV.TM_DASHBOARD_URL];
           }
         }
       }

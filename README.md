@@ -875,6 +875,98 @@ meaningful signal; "closed" is cosmetic metadata.
 
 ---
 
+## Recipe: post-run notifications (Google Chat / Slack / anywhere)
+
+This package deliberately does **not** ship its own chat/Slack/Teams
+integration — that's scope creep for a BrowserStack reporter, and the
+ecosystem of webhooks is large enough that one hardcoded integration
+won't fit everyone. Instead, the service exposes the run's dashboard URLs
+as **stable env vars** that any user-defined service can read in its own
+`onComplete` hook. That's all you need.
+
+**Stable env vars** (treat as part of the public API):
+
+| Env var | Set when | Contents |
+| --- | --- | --- |
+| `BSTACK_REPORTER_DASHBOARD_URL` | Observability is enabled | `https://observability.browserstack.com/builds/<id>` |
+| `BSTACK_REPORTER_TM_DASHBOARD_URL` | TM is configured | `https://test-management.browserstack.com/projects/<PR>/test-runs/<TR>` |
+
+Both stay populated through the user's `onComplete`, so a downstream
+service can read them after `BstackService` finishes its work.
+
+### Example: post a run summary to Google Chat
+
+In your Chat space, create an **Incoming Webhook** (Apps & integrations
+→ Manage webhooks → Add webhook), copy the URL, then:
+
+```ts
+// wdio.conf.ts
+import 'dotenv/config';
+import { BstackService } from 'wdio-bstack-reporter';
+
+class GoogleChatNotifier {
+  async onComplete(
+    exitCode: number,
+    _config: unknown,
+    _capabilities: unknown,
+    results: { finished?: number; passed?: number; failed?: number; retries?: number },
+  ): Promise<void> {
+    const webhook = process.env.GCHAT_WEBHOOK_URL;
+    if (!webhook) return;
+
+    const total = results?.finished ?? 0;
+    const passed = results?.passed ?? 0;
+    const failed = results?.failed ?? 0;
+    const status = exitCode === 0 ? '✅ Passed' : '❌ Failed';
+    const tmUrl = process.env.BSTACK_REPORTER_TM_DASHBOARD_URL;
+    const obsUrl = process.env.BSTACK_REPORTER_DASHBOARD_URL;
+
+    const lines = [
+      `${status} — ${passed}/${total} passed, ${failed} failed`,
+      tmUrl ? `Test Management: ${tmUrl}` : null,
+      obsUrl ? `Observability: ${obsUrl}` : null,
+    ].filter(Boolean);
+
+    try {
+      await fetch(webhook, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ text: lines.join('\n') }),
+      });
+    } catch (err) {
+      // Never crash the run on a chat failure.
+      console.warn('[notify] Google Chat post failed:', (err as Error).message);
+    }
+  }
+}
+
+export const config: WebdriverIO.Config = {
+  services: [
+    // Order matters slightly: register the notifier BEFORE BstackService so
+    // its onComplete reads the env vars while they're still set, regardless
+    // of clearance ordering. (BstackService keeps the URL env vars set
+    // either way, but putting the notifier first is defensive.)
+    [GoogleChatNotifier],
+    [BstackService, { /* your options */ }],
+  ],
+  // ...
+};
+```
+
+If you'd rather pretty-render with a Cards V2 message, swap the `text`
+body for the JSON shape from the [Google Chat REST docs](https://developers.google.com/workspace/chat/api/reference/rest/v1/cards-v2). The same pattern works for Slack (use Slack's [incoming webhook
+URL](https://api.slack.com/messaging/webhooks) and `{ text }` payload),
+Microsoft Teams, Discord, or your own status server.
+
+### Why this isn't a built-in feature
+
+- Webhook payloads differ by platform; each one would be its own integration.
+- Teams have varied requirements (templates, threading, mention rules, throttling).
+- A 30-line user-owned class is more flexible than 200 lines of optional config.
+- Keeps the package focused on what its name promises: BrowserStack reporting.
+
+---
+
 ## Offline spooling
 
 When the HTTP layer exhausts its retry budget (default: 3 attempts on 5xx/429

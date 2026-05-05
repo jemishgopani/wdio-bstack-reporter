@@ -4,6 +4,30 @@ All notable changes to `wdio-bstack-reporter` are documented here. The format
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — 2026-05-05
+
+### Added
+
+- **Stable env vars for user-defined post-run hooks.** `BSTACK_REPORTER_DASHBOARD_URL`
+  (Observability) and `BSTACK_REPORTER_TM_DASHBOARD_URL` (Test Management)
+  are now kept set in `process.env` after the service's own `onComplete`
+  finishes, so user-defined services can read them in their own
+  `onComplete` to compose downstream actions (chat notifications, status
+  webhooks, etc.). See the new "Recipe: post-run notifications" section
+  in the README. Treat both env vars as part of the public API.
+
+### Changed
+
+- **TM dashboard URL format.** The dashboard URL set in `BSTACK_REPORTER_TM_DASHBOARD_URL`
+  (and printed at run start/end) now uses the BS web-dashboard's canonical
+  format with the numeric project id and a `/folder` suffix:
+  `https://test-management.browserstack.com/projects/<numericProjectId>/test-runs/<TR-NNN>/folder`
+  Previously it used the identifier-based path
+  (`/projects/<PR-N>/test-runs/<TR-NNN>`), which works at the API level but
+  doesn't always render correctly in the BS dashboard UI. The new URL is
+  sourced directly from BS's `test_run.urls.self` response field, so
+  numeric project ids stay in sync with whatever BS exposes.
+
 ## [0.1.0] — 2026-05-04
 
 Initial public release.
@@ -36,4 +60,5 @@ Initial public release.
   cause BrowserStack to auto-provision a new TM project, and `projectId`/
   `projectName` are checked to point at the same project.
 
+[0.2.0]: https://github.com/jemishgopani/wdio-bstack-reporter/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jemishgopani/wdio-bstack-reporter/releases/tag/v0.1.0

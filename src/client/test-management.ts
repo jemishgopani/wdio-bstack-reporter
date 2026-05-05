@@ -20,8 +20,13 @@ export interface TmCreateRunInput {
 }
 
 export interface TmCreateRunResult {
-  /** Either `id` or `identifier` is returned by the API; we expose the identifier. */
+  /** Identifier form (TR-NNN), used by the API for posting results / closing. */
   runId: string;
+  /**
+   * Canonical dashboard URL. Sourced from BS's `test_run.urls.self` response
+   * field when present (preserves the numeric project id BS uses in its UI),
+   * with `/folder` appended to land on the default tab.
+   */
   dashboardUrl: string;
 }
 
@@ -41,7 +46,16 @@ export interface TmTestResult {
 }
 
 interface TmCreateRunResponse {
-  test_run?: { id?: string | number; identifier?: string };
+  test_run?: {
+    id?: string | number;
+    identifier?: string;
+    /**
+     * BS embeds the canonical web-dashboard URL here, with the numeric
+     * project id already in the path. Format observed in practice:
+     * `https://test-management.browserstack.com/projects/<numericProjectId>/test-runs/<TR-NNN>`
+     */
+    urls?: { self?: string };
+  };
   identifier?: string;
   id?: string | number;
 }
@@ -50,6 +64,14 @@ export class TestManagementClient {
   #username: string;
   #accessKey: string;
   #projectId: string;
+  /**
+   * Numeric project id (resolved from `listTmProjects`). When set, dashboard
+   * URLs use the numeric form `/projects/${numericId}/test-runs/${numericRunId}/folder`
+   * — that's the format the BrowserStack TM web dashboard actually generates
+   * in its address bar. The identifier-based URL (`PR-N` / `TR-N`) works at
+   * the API level but doesn't always render correctly in the UI.
+   */
+  #numericProjectId: string | undefined;
   #runId: string | undefined;
   #timeoutMs: number | undefined;
   #maxRetries: number | undefined;
@@ -58,12 +80,16 @@ export class TestManagementClient {
     username: string;
     accessKey: string;
     projectId: string;
+    numericProjectId?: string | number;
     timeoutMs?: number;
     maxRetries?: number;
   }) {
     this.#username = opts.username;
     this.#accessKey = opts.accessKey;
     this.#projectId = opts.projectId;
+    if (opts.numericProjectId !== undefined) {
+      this.#numericProjectId = String(opts.numericProjectId);
+    }
     this.#timeoutMs = opts.timeoutMs;
     this.#maxRetries = opts.maxRetries;
   }
@@ -97,8 +123,24 @@ export class TestManagementClient {
     this.#runId = runId;
     return {
       runId,
-      dashboardUrl: `https://test-management.browserstack.com/projects/${this.#projectId}/test-runs/${runId}`,
+      dashboardUrl: this.#buildDashboardUrl(runId, res.test_run?.urls?.self),
     };
+  }
+
+  #buildDashboardUrl(runId: string, urlsSelf: string | undefined): string {
+    // BS already returns the canonical dashboard URL in `test_run.urls.self`
+    // with the numeric project id baked in — just append `/folder` to land
+    // on the default tab in the dashboard. (Without `/folder` the URL
+    // sometimes redirects, sometimes lands on a stale tab.)
+    if (urlsSelf) {
+      return urlsSelf.endsWith('/folder') ? urlsSelf : `${urlsSelf}/folder`;
+    }
+    // Fallback when BS didn't include urls.self (older API behavior or a
+    // future shape change). Constructed-from-id form, identifier-based.
+    if (this.#numericProjectId) {
+      return `https://test-management.browserstack.com/projects/${this.#numericProjectId}/test-runs/${runId}/folder`;
+    }
+    return `https://test-management.browserstack.com/projects/${this.#projectId}/test-runs/${runId}`;
   }
 
   async postResults(results: TmTestResult[]): Promise<void> {
@@ -226,6 +268,13 @@ export class TestManagementClient {
 export interface TmProjectSummary {
   identifier: string;
   name: string;
+  /**
+   * Numeric form, used to build dashboard URLs. The TM web UI uses
+   * `/projects/<numeric>/test-runs/<numeric>/folder`. Older API responses
+   * may not include this — consumers should fall back to identifier-based
+   * URLs when undefined.
+   */
+  numericId?: string;
 }
 
 /**
@@ -244,7 +293,12 @@ export async function listTmProjects(opts: {
   maxRetries?: number;
 }): Promise<TmProjectSummary[]> {
   const res = await httpRequest<{
-    projects?: Array<{ identifier?: string; name?: string }>;
+    projects?: Array<{
+      identifier?: string;
+      name?: string;
+      id?: string | number;
+      urls?: { self?: string };
+    }>;
   }>({
     method: 'GET',
     url: `${BASE}/projects`,
@@ -254,7 +308,21 @@ export async function listTmProjects(opts: {
   });
   const out: TmProjectSummary[] = [];
   for (const p of res.projects ?? []) {
-    if (p.identifier && p.name) out.push({ identifier: p.identifier, name: p.name });
+    if (p.identifier && p.name) {
+      // BS's `/projects` response embeds the numeric id in `urls.self`
+      // (e.g. `.../projects/232091`). Extract it so callers can build
+      // dashboard URLs that match the BS web UI.
+      const numericFromUrl = p.urls?.self
+        ? p.urls.self.match(/\/projects\/(\d+)(?:\/|$)/)?.[1]
+        : undefined;
+      const numericId =
+        p.id != null ? String(p.id) : numericFromUrl !== undefined ? numericFromUrl : undefined;
+      out.push({
+        identifier: p.identifier,
+        name: p.name,
+        ...(numericId !== undefined ? { numericId } : {}),
+      });
+    }
   }
   return out;
 }

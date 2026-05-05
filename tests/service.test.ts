@@ -426,4 +426,59 @@ describe('BstackService', () => {
       expect(tmCalls).toHaveLength(0);
     });
   });
+
+  describe('user-readable env vars', () => {
+    it('keeps DASHBOARD_URL and TM_DASHBOARD_URL set after onComplete (for user-defined notifier services)', async () => {
+      fetchMock.mockImplementation((url: string) => {
+        if (String(url).endsWith('/api/v2/projects')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ projects: [{ identifier: 'PR-7', name: 'PR-7-Project' }] }),
+              { status: 200 },
+            ),
+          );
+        }
+        if (String(url).includes('/api/v1/builds') && String(url).endsWith('/stop')) {
+          return Promise.resolve(new Response('{}', { status: 200 }));
+        }
+        if (String(url).includes('/api/v1/builds')) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ build_hashed_id: 'BURL' }), { status: 200 }),
+          );
+        }
+        if (
+          String(url).includes('test-management.browserstack.com') &&
+          String(url).includes('/test-runs') &&
+          !String(url).endsWith('/close') &&
+          !String(url).match(/test-runs\/TR-/)
+        ) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ test_run: { identifier: 'TR-9' } }), { status: 200 }),
+          );
+        }
+        if (String(url).includes('/test-cases')) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ test_cases: [], info: { next: null } }), { status: 200 }),
+          );
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      });
+      vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      const svc = new BstackService({
+        projectName: 'PR-7-Project',
+        testManagement: { projectId: 'PR-7' },
+        preventTmAutoCreate: false,
+      });
+      await svc.onPrepare({}, undefined);
+      await svc.onComplete(0, {}, {}, { finished: 1, passed: 1, failed: 0 });
+      // These two URL env vars MUST persist after onComplete so that user-
+      // defined services can read them in their own onComplete (recipe in
+      // README). Treat as part of the public API.
+      expect(process.env[ENV.DASHBOARD_URL]).toContain('https://observability.browserstack.com');
+      expect(process.env[ENV.TM_DASHBOARD_URL]).toContain('https://test-management.browserstack.com');
+      // These ones are still cleared (sensitive/behavioral).
+      expect(process.env[ENV.BUILD_ID]).toBeUndefined();
+      expect(process.env[ENV.TM_RUN_ID]).toBeUndefined();
+    });
+  });
 });

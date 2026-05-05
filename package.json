@@ -1,6 +1,6 @@
 {
   "name": "wdio-bstack-reporter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "WebdriverIO reporter and launcher service that creates a BrowserStack Test Observability build per execution batch and updates it live as tests run. Optional Test Management integration with live result streaming, scope discovery, and hook-failure handling.",
   "type": "module",
   "main": "./dist/index.cjs",
